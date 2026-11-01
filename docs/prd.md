@@ -2,6 +2,8 @@ I'm building this for my dad's lodge.
 
 At a high level, the bookings are all offline and will continue to do so. The purpose of the software is to streamline the management of the offline bookings and related accounting. We also need to support reserving future bookings which are usually made via phone calls.
 
+Tech choices and the alternatives we considered are in [tech-stack.md](tech-stack.md).
+
 High level internal notes:
 - Keep things minimal
 - Online bookings are out of scope.
@@ -22,7 +24,7 @@ Below are what the client expect from the software;
         - Capture exactly one guest's address even when there are multiple guests. There shouldn't be an option to capture more addresses. Internal note: To simplify, save address at the core booking table (assuming we use an associated table to save the guests).
         - Internal note: A reusable guest profile is out of scope.
     - Capture and upload the ID picture for every guest at actual check-in.
-        - Internal note: Use S3 to store images.
+        - Internal note: Use Cloudflare R2 to store images. IDs are never to be deleted.
     - See rent of the unit pre-filled based on the pre-configured amount against the unit type and selected number of days
         - Allow the total rent for the whole stay to be edited.
         - Changing the default rate later shouldn't change the rent already agreed for a saved booking.

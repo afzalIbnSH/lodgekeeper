@@ -192,7 +192,7 @@ Table: `booking_guests`
 | `full_name` | `text` | Guest's name for this stay. |
 | `id_type` | `text` | `aadhaar`, `passport`, `driving_licence`, or `voter_id`. |
 | `id_number` | `text` | Document identifier; text preserves letters and leading zeroes. |
-| `id_image_key` | `text` | S3 object key for the captured ID image. |
+| `id_image_key` | `text` | Cloudflare R2 object key for the captured ID image. |
 
 Constraints: foreign key `booking_id` to `bookings(id)`; supported ID type; nonblank name, ID number, and image key. ID numbers are not globally unique: the same person can stay again.
 
