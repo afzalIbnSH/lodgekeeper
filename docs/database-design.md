@@ -1,12 +1,11 @@
 # Database Design with PostgreSQL
 
+This database serves one property: my dad's lodge. There is no org entity or multi-tenancy. Expected scale is at most 700 bookings and 1000 guests per month.
+
 ## Tables and Relationships
 
 ```mermaid
 erDiagram
-    ORGANISATION ||--o{ APP_USER : has
-    ORGANISATION ||--o{ UNIT_TYPE : defines
-    ORGANISATION ||--o{ UNIT : contains
     UNIT_TYPE ||--o{ UNIT : classifies
     UNIT ||--o{ BOOKING : hosts
     APP_USER ||--o{ BOOKING : creates
@@ -14,11 +13,9 @@ erDiagram
     BOOKING ||--o{ BOOKING_PAYMENT : receives
 ```
 
-Each unit type belongs to one organisation. A unit has one current unit type and many bookings over time. A reservation may have no guest records yet; a booking with an actual check-in must have at least one guest. The conditional minimum guest count is to be enforced by the application.
+A unit has one current unit type and many bookings over time. A reservation may have no guest records yet; a booking with an actual check-in must have at least one guest. The conditional minimum guest count is to be enforced by the application.
 
-Each app user belongs to one organisation and can access its data.
-
-## Shared field conventions
+## Field conventions
 
 Every table has these fields in addition to the fields listed in its section:
 
@@ -28,29 +25,17 @@ Every table has these fields in addition to the fields listed in its section:
 | `created_at` | `timestamptz` | Required; defaults to the creation time. |
 | `updated_at` | `timestamptz` | Required; set on creation and maintained on updates. |
 
-Fields below are required unless marked nullable. Table names are plural, and field names use snake case.
+Fields are required unless marked nullable. Table names are plural, and field names use snake case.
 
 Required text fields must be nonblank after trimming, including unit type names and unit labels. Every table rejects non-finite numeric values and timestamps; positivity checks alone are insufficient for PostgreSQL numeric `NaN`. Check constraints restrict ID types to the supported values.
 
-All amounts are in INR. Stored amounts use `numeric(12,2)`, and calculations use decimal arithmetic. PostgreSQL recommends `numeric` when monetary exactness matters; a two-decimal column rounds incoming values, so the agreed truncation and upward tax rounding are applied explicitly before storing the results. [PostgreSQL numeric types](https://www.postgresql.org/docs/current/datatype-numeric.html).
+Stored amounts use `numeric(12,2)`, and calculations use decimal arithmetic. PostgreSQL recommends `numeric` when monetary exactness matters; a two-decimal column rounds incoming values, so the agreed truncation and upward tax rounding are applied explicitly before storing the results. [PostgreSQL numeric types](https://www.postgresql.org/docs/current/datatype-numeric.html).
 
-Event timestamps use `timestamptz`. The organisation's named timezone is stored separately for display and reporting, because `timestamptz` does not retain the original timezone name. [PostgreSQL date and time types](https://www.postgresql.org/docs/current/datatype-datetime.html).
+Event timestamps use `timestamptz`. The property's named timezone is stored separately for display and reporting, because `timestamptz` does not retain the original timezone name. [PostgreSQL date and time types](https://www.postgresql.org/docs/current/datatype-datetime.html).
 
-## Organisation
+## Property configuration
 
-Table: `organisations`
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `name` | `text` | Property name, also used on receipt headers. |
-| `address` | `text` | Property address, also available for receipt headers. |
-| `gstin` | `text`, nullable | Applicable GST registration number, if displayed on receipts. |
-| `timezone` | `text` | Named timezone; initially `Asia/Kolkata`. |
-| `is_active` | `boolean` | Defaults to `true`; allows the account to be disabled without removing its history. |
-
-Constraints: nonblank name and address. The timezone must be a supported named timezone.
-
-An organisation is the boundary between customers of the SaaS and represents one lodging property.
+Keep the lodge's details in one shared application configuration. Receipts and reports shall read from this same configuration. No table is required for this.
 
 ## App user
 
@@ -58,18 +43,17 @@ Table: `app_users`
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Organisation this user can access. |
 | `username` | `text` | Login name, unique across the application after trimming and case normalization. |
 | `password_hash` | `text` | Encoded salted password hash, including the algorithm and its parameters. |
 | `display_name` | `text` | User's name in the application. |
 | `email` | `text`, nullable | Contact or display information. |
 | `is_active` | `boolean` | Defaults to `true`; disabled users cannot access the application. |
 
-Constraints: foreign key to `organisations`; unique `(organisation_id, id)` for references from bookings; unique index on `lower(btrim(username))`. Provisioning and login apply the same username normalization.
+Constraints: unique index on `lower(btrim(username))`. Provisioning and login apply the same username normalization.
 
 The backend generates usernames and passwords and provisions users through a script or admin API. There is no self-service registration. Passwords are hashed with Argon2id before storage; `password_hash` stores the library's encoded hash, including its salt and parameters. Plaintext passwords are not stored, and there is no separate salt column. [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
 
-Users have access to their organisation's data. Separate staff roles are outside the current scope.
+Active, authenticated users have access to the lodge's data. Separate staff roles are outside the current scope.
 
 ## Unit type
 
@@ -77,12 +61,11 @@ Table: `unit_types`
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Organisation defining this type. |
 | `name` | `text` | For example, `Double Bedroom`. |
 | `default_daily_total_rent` | `numeric(12,2)` | Default tax-inclusive rent per billing day. |
 | `is_active` | `boolean` | Defaults to `true`; retired types remain available for historical references. |
 
-Constraints: foreign key to `organisations`; unique `(organisation_id, id)` for references from units; name unique within an organisation after trimming and case normalization; `default_daily_total_rent > 0`.
+Constraints: name unique across `unit_types` after trimming and case normalization; `default_daily_total_rent > 0`.
 
 A billing day means 24 elapsed hours. The default is used to prefill a booking, which is allowed to be edited.
 
@@ -92,12 +75,11 @@ Table: `units`
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Owning organisation, matching the unit type. |
-| `unit_type_id` | `uuid` | Current unit type, belonging to the same organisation. |
+| `unit_type_id` | `uuid` | Current unit type. |
 | `label` | `text` | Display identifier such as `201`, `A-01`, or `Dorm 2`. |
 | `is_active` | `boolean` | Defaults to `true`; inactive units cannot receive new bookings. |
 
-Constraints: foreign key to `organisations`; composite foreign key `(organisation_id, unit_type_id)` to `unit_types(organisation_id, id)`; unique `(organisation_id, id)` for references from bookings; label unique within an organisation after trimming and case normalization.
+Constraints: foreign key `unit_type_id` to `unit_types(id)`; label unique across `units` after trimming and case normalization.
 
 The UUID identifies the unit internally. Its label is text, not an integer. Availability is derived from bookings.
 
@@ -109,9 +91,8 @@ A booking holds the shared details of a reservation or stay, including one guest
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Owning organisation, matching the unit and creating user. |
 | `unit_id` | `uuid` | Particular unit allocated to this booking. |
-| `created_by_user_id` | `uuid` | User who entered the booking, in the same organisation. |
+| `created_by_user_id` | `uuid` | User who entered the booking. |
 | `booking_number` | `bigint` | Unique generated reference for display and receipt lookup; gaps are acceptable. |
 | `unit_label_snapshot` | `text` | Unit label when booked, preserving historical receipt and ledger details. |
 | `unit_type_name_snapshot` | `text` | Unit type name when booked. |
@@ -133,8 +114,8 @@ A booking holds the shared details of a reservation or stay, including one guest
 
 Constraints:
 
-- Foreign key to `organisations`; composite foreign key `(organisation_id, unit_id)` to `units(organisation_id, id)`; composite foreign key `(organisation_id, created_by_user_id)` to `app_users(organisation_id, id)`.
-- Unique `(organisation_id, id)` for references from booking guests and payments; unique `booking_number`.
+- Foreign key `unit_id` to `units(id)`; foreign key `created_by_user_id` to `app_users(id)`.
+- Unique `booking_number`.
 - `booked_days > 0`; at least one of `scheduled_check_in` and `checked_in_at` must be nonnull.
 - `scheduled_checkout` must be strictly after each supplied arrival timestamp: `scheduled_check_in` and `checked_in_at`.
 - `checked_out_at` must be null, or `checked_in_at` must be nonnull and strictly earlier than `checked_out_at`.
@@ -207,14 +188,13 @@ Table: `booking_guests`
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Owning organisation, matching the booking. |
 | `booking_id` | `uuid` | Stay this person belongs to. |
 | `full_name` | `text` | Guest's name for this stay. |
 | `id_type` | `text` | `aadhaar`, `passport`, `driving_licence`, or `voter_id`. |
 | `id_number` | `text` | Document identifier; text preserves letters and leading zeroes. |
 | `id_image_key` | `text` | S3 object key for the captured ID image. |
 
-Constraints: composite foreign key `(organisation_id, booking_id)` to `bookings(organisation_id, id)`; supported ID type; nonblank name, ID number, and image key. ID numbers are not globally unique: the same person can stay again.
+Constraints: foreign key `booking_id` to `bookings(id)`; supported ID type; nonblank name, ID number, and image key. ID numbers are not globally unique: the same person can stay again.
 
 Guest records belong to the individual stay. A separate reusable guest profile is outside the current scope.
 
@@ -228,22 +208,17 @@ Each row records one payment towards a booking. A booking may have zero or more 
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `organisation_id` | `uuid` | Owning organisation, matching the booking. |
 | `booking_id` | `uuid` | Booking this payment belongs to. |
 | `amount` | `numeric(12,2)` | Amount received in this payment, in INR. |
 | `paid_at` | `timestamptz` | Time the payment was received, distinct from when the record was created. |
 
-Constraints: composite foreign key `(organisation_id, booking_id)` to `bookings(organisation_id, id)`; `amount > 0`. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
+Constraints: foreign key `booking_id` to `bookings(id)`; `amount > 0`. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
 
 The pending amount is derived as `bookings.total_rent - COALESCE(SUM(booking_payments.amount), 0)` for the booking. Neither the pending amount nor a paid/unpaid flag is stored.
 
-## Organisation boundaries
-
-Foreign keys do not enforce access control. Derive organisation scope from the authenticated app user and apply it to every read and write.
-
 ## Deletion and history
 
-Foreign keys restrict deletion of referenced organisations, app users, unit types, units, and bookings.
+Foreign keys restrict deletion of referenced app users, unit types, units, and bookings.
 
 Receipts and ledgers have no separate tables. The schema stores no immutable receipt copies or change history.
 
@@ -253,9 +228,9 @@ Primary keys, unique constraints, and both exclusion constraints supply their ow
 
 | Table | Index | Purpose |
 | --- | --- | --- |
-| `bookings` | `(organisation_id, scheduled_checkout) WHERE checked_in_at IS NOT NULL AND checked_out_at IS NULL` | Occupied units ordered by expected checkout. |
-| `bookings` | `(organisation_id, scheduled_check_in) WHERE checked_in_at IS NULL AND cancelled_at IS NULL` | Unarrived reservations ordered by scheduled arrival. |
-| `bookings` | `(organisation_id, checked_in_at)` | Actual check-in date ranges and stay history. |
-| `booking_guests` | `(organisation_id, booking_id)` | Load all occupants for a booking. |
-| `booking_payments` | `(organisation_id, booking_id, paid_at)` | Load a booking's payments in payment-time order and sum its paid amounts. |
-| `units` | `(organisation_id, unit_type_id)` | List units by organisation and type; support the type reference. |
+| `bookings` | `(scheduled_checkout) WHERE checked_in_at IS NOT NULL AND checked_out_at IS NULL` | Occupied units ordered by expected checkout. |
+| `bookings` | `(scheduled_check_in) WHERE checked_in_at IS NULL AND cancelled_at IS NULL` | Unarrived reservations ordered by scheduled arrival. |
+| `bookings` | `(checked_in_at)` | Actual check-in date ranges and stay history. |
+| `booking_guests` | `(booking_id)` | Load all occupants for a booking. |
+| `booking_payments` | `(booking_id, paid_at)` | Load a booking's payments in payment-time order and sum its paid amounts. |
+| `units` | `(unit_type_id)` | List units by type; support the type reference. |

@@ -1,10 +1,12 @@
+I'm building this for my dad's lodge.
+
 At a high level, the bookings are all offline and will continue to do so. The purpose of the software is to streamline the management of the offline bookings and related accounting. We also need to support reserving future bookings which are usually made via phone calls.
 
 High level internal notes:
-- **Keep things minimal**. For instance, don't engineer for a future possibility of online bookings.
+- Keep things minimal
+- Online bookings are out of scope.
+- There are no plans to actively pursue other clients, so multi-tenancy is out of scope. Expected scale is at most 700 bookings and 1000 guests per month. If at all a concrete second client come to happen in the future, adding multi-tenancy and the required data isolation before giving them access shouldn't be hard.
 - Although the lodge currently has only full-room rentals, use the term "unit" instead of "room" so that it is easier to scale.
-- Build this as a **minimal** SAAS to keep the door open for other clients in the future, even though that is currently not in the pipeline.
-- Each org represents one property. Multiple properties per org is out of scope. Each staff account belongs to one org and can access only that org's records. Related records must belong to the same org too.
 
 Below are what the client expect from the software;
 
