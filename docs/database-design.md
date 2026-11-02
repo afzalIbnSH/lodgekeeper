@@ -10,7 +10,8 @@ erDiagram
     UNIT ||--o{ BOOKING : hosts
     APP_USER ||--o{ BOOKING : creates
     BOOKING ||--o{ BOOKING_GUEST : includes
-    BOOKING ||--o{ BOOKING_PAYMENT : receives
+    BOOKING ||--o{ BOOKING_TRANSACTION : has
+    APP_USER ||--o{ BOOKING_TRANSACTION : records
 ```
 
 A unit has one current unit type and many bookings over time. A reservation may have no guest records yet; a booking with an actual check-in must have at least one guest. The conditional minimum guest count is to be enforced by the application.
@@ -200,27 +201,43 @@ Guest records belong to the individual stay. A separate reusable guest profile i
 
 Each guest record contains one document and one captured image.
 
-## Booking payment
+## Booking transaction
 
-Table: `booking_payments`
+Table: `booking_transactions`
 
-Each row records one payment towards a booking. A booking may have zero or more payments.
+Each row records one payment received or refund issued for a booking. Both types link directly to the booking; refunds are not linked to individual payment rows.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `booking_id` | `uuid` | Booking this payment belongs to. |
-| `amount` | `numeric(12,2)` | Amount received in this payment, in INR. |
-| `paid_at` | `timestamptz` | Time the payment was received, distinct from when the record was created. |
+| `booking_id` | `uuid` | Booking this payment or refund belongs to. |
+| `created_by_user_id` | `uuid` | User who recorded the payment or refund. |
+| `type` | `text` | `PAYMENT` for money received or `REFUND` for money returned; defaults to `PAYMENT`. |
+| `amount` | `numeric(12,2)` | Positive amount received or returned, in INR. The type determines its effect on the balance. |
+| `transacted_at` | `timestamptz` | Time the money was received or returned, distinct from when the record was created. |
+| `reason` | `text`, nullable | Required and nonblank for refunds; optional for payments. |
 
-Constraints: foreign key `booking_id` to `bookings(id)`; `amount > 0`. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
+Constraints: foreign key `booking_id` to `bookings(id)`; foreign key `created_by_user_id` to `app_users(id)`; `type IN ('PAYMENT', 'REFUND')`; `amount > 0`; when `type = 'REFUND'`, `reason` must be nonnull and nonblank after trimming. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
 
-The pending amount is derived as `bookings.total_rent - COALESCE(SUM(booking_payments.amount), 0)` for the booking. Neither the pending amount nor a paid/unpaid flag is stored.
+For each booking, derive net received and pending amounts as:
+
+```sql
+net_received = COALESCE(SUM(
+    CASE WHEN type = 'PAYMENT' THEN amount ELSE -amount END
+), 0)
+pending_amount = bookings.total_rent - net_received
+```
+
+Neither net received, pending amount, nor a paid/unpaid flag is stored.
+
+Cumulative refunds must not exceed cumulative payments for the booking. This cross-row rule is enforced by the application: every payment/refund insert path locks the parent booking row with `SELECT ... FOR UPDATE`, reads the current totals, validates the proposed refund against net received, and inserts within the same transaction. A row-level check constraint alone cannot enforce this aggregate limit.
+
+Rows are append-only: existing payments and refunds cannot be updated or deleted, including when a booking is cancelled. The runtime database role has `SELECT` and `INSERT` privileges on `booking_transactions`, but no `UPDATE`, `DELETE`, or `TRUNCATE` privileges; it must be separate from the table-owning migration role. Both shared timestamps are set on insertion, and `updated_at` remains equal to `created_at`. [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
 
 ## Deletion and history
 
 Foreign keys restrict deletion of referenced app users, unit types, units, and bookings.
 
-Receipts and ledgers have no separate tables. The schema stores no immutable receipt copies or change history.
+Receipts and ledgers have no separate tables. The schema stores no immutable receipt copies or general change-history tables.
 
 ## Indexes
 
@@ -231,6 +248,7 @@ Primary keys, unique constraints, and both exclusion constraints supply their ow
 | `bookings` | `(scheduled_checkout) WHERE checked_in_at IS NOT NULL AND checked_out_at IS NULL` | Occupied units ordered by expected checkout. |
 | `bookings` | `(scheduled_check_in) WHERE checked_in_at IS NULL AND cancelled_at IS NULL` | Unarrived reservations ordered by scheduled arrival. |
 | `bookings` | `(checked_in_at)` | Actual check-in date ranges and stay history. |
+| `bookings` | `(checked_out_at) WHERE checked_out_at IS NOT NULL` | Actual checkout date ranges for monthly and custom-date ledgers. |
 | `booking_guests` | `(booking_id)` | Load all occupants for a booking. |
-| `booking_payments` | `(booking_id, paid_at)` | Load a booking's payments in payment-time order and sum its paid amounts. |
+| `booking_transactions` | `(booking_id, transacted_at)` | Load a booking's payments and refunds in event-time order and calculate net received. |
 | `units` | `(unit_type_id)` | List units by type; support the type reference. |

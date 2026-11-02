@@ -33,7 +33,7 @@ Below are what the client expect from the software;
             - Compute the GSTs by doing (600 - 571.42) / 2 = 14.29 each.
             - If the tax amounts has more than 2 decimal places, for example 14.293, round upward to two decimal places, to 14.30 in this example, and adjust the final base to preserve the total (so that the taxes never become less than 2.5% but only possibly fractionally higher).
         Internal note: Changing GST values is out of scope. Simply use a code-level default.
-    - Input paid amounts, in full or partial. Full pay is usually taken upfront but at times, especially a long staying guest, can pay in installments. So need to capture every associated payments individually with timestamps. Re-visiting a booking must show the payments and pending amount if any.
+    - Input paid amounts, in full or partial. Full pay is usually taken upfront but at times, especially a long staying guest, can pay in installments. So need to capture every associated payments individually with timestamps. Re-visiting a booking must show the payments and pending amount if any. In case of any refunds, capture them individually too. If for instance, 800 rs was paid and refunded in 2 installments of 200 and 600, there should be 3 records.
     - Compute checkout time as 24 hours * number of selected days after check-in
         - Allow the time to be edited
         - Internal note: Non-rolling checkouts are out of scope.
@@ -45,6 +45,7 @@ Below are what the client expect from the software;
     - Capture the caller's name and phone number. The caller doesn't have to be one of the guests.
     - Guest details, IDs, the shared address and purpose of visit can wait until actual check-in.
     - Allow a reservation to be cancelled before actual check-in. Keep the cancelled booking, but free up the unit for that period.
+        - Preserve any recorded payments when cancelling. If a refund is issued, record that, never delete a payment record.
     - Internal note: Let this be derived in db via a scheduled check in time and a null actual check in time. Don't use a separate `booking_status` column and introduce a second source of truth.
 
 - When guest/s checkout;
@@ -56,6 +57,7 @@ Below are what the client expect from the software;
     - By default, avoid id details and pic. But allow to optionally add them for any possible legal purposes.
 
 - Able to generate and print monthly ledger to use for monthly gst submission. Internal note: Keep the backend of the ledger generation open ended where any start and end dates are accepted to allow scaling to other date ranges. The format below;
+    - Select bookings by actual checkout date in the lodge's timezone. Include the whole booking's saved base rent, CGST and SGST in the period containing that checkout, regardless of arrival or payment dates. Open stays and cancelled reservations are excluded.
 
 | Unit | Rent | CGST | SGST |
 | :--- | :---: | :---: | :---: |
