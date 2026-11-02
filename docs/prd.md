@@ -33,7 +33,13 @@ Below are what the client expect from the software;
             - Compute the GSTs by doing (600 - 571.42) / 2 = 14.29 each.
             - If the tax amounts has more than 2 decimal places, for example 14.293, round upward to two decimal places, to 14.30 in this example, and adjust the final base to preserve the total (so that the taxes never become less than 2.5% but only possibly fractionally higher).
         Internal note: Changing GST values is out of scope. Simply use a code-level default.
-    - Input paid amounts, in full or partial. Full pay is usually taken upfront but at times, especially a long staying guest, can pay in installments. So need to capture every associated payments individually with timestamps. Re-visiting a booking must show the payments and pending amount if any. In case of any refunds, capture them individually too. If for instance, 800 rs was paid and refunded in 2 installments of 200 and 600, there should be 3 records.
+    - Input rent payments, in full or partial. Full pay is usually taken upfront but at times, especially a long staying guest, can pay in installments. So need to capture every associated payment individually with timestamps. Re-visiting a booking must show the payments and pending rent if any. In case of any rent refunds, capture them individually too. If for instance, 800 rs was paid and refunded in 2 installments of 200 and 600, there should be 3 records.
+    - Optionally collect a security deposit at check-in, separately from rent.
+        - Keep the rent pre-filled from the unit type's default rate and selected days, still editable. Add an optional deposit received field, defaulting to ₹0, which staff edit if a deposit is taken. There is no fixed or required deposit amount.
+        - A blank or zero deposit creates no transaction. Record a positive deposit as a separate receipt, even when rent and deposit are collected together. Keep the actual rent payment separate from the agreed rent so partial payments still work.
+        - Track deposit receipts and returns individually, including installments, and show the deposit still held separately from pending rent. Preserve existing records when recording later collections or returns.
+        - For example, collecting ₹1,000 for ₹800 rent and a ₹200 deposit creates a rent payment of ₹800 and a deposit receipt of ₹200. Returning ₹200 later creates a deposit return, not a rent refund; pending rent stays zero.
+        - Deposit returns cannot exceed the deposit currently held. Rent refunds cannot exceed net rent payments, excluding deposits. Deposits do not pay down rent automatically and are excluded from the agreed rent and its GST calculation.
     - Compute checkout time as 24 hours * number of selected days after check-in
         - Allow the time to be edited
         - Internal note: Non-rolling checkouts are out of scope.
@@ -45,19 +51,21 @@ Below are what the client expect from the software;
     - Capture the caller's name and phone number. The caller doesn't have to be one of the guests.
     - Guest details, IDs, the shared address and purpose of visit can wait until actual check-in.
     - Allow a reservation to be cancelled before actual check-in. Keep the cancelled booking, but free up the unit for that period.
-        - Preserve any recorded payments when cancelling. If a refund is issued, record that, never delete a payment record.
+        - Preserve all transaction records when cancelling. Record any rent refund or deposit return separately, without deleting or editing earlier entries. Cancellation itself does not record money returned.
     - Internal note: Let this be derived in db via a scheduled check in time and a null actual check in time. Don't use a separate `booking_status` column and introduce a second source of truth.
 
 - When guest/s checkout;
     - Mark the booking as checked out, which should save the actual checked out time in the booking. Internal note: Again, don't use a separate `booking_status` column, just have a actual check out column which shall be null originally and filled on check out.
+    - Show the deposit still held and let staff record how much is actually returned. Do not automatically mark it returned on checkout. Any unreturned deposit remains visible and can be returned later, including after checkout or reservation cancellation.
 
 - See occupied units, with earliest checkout seen at top (allow sorting the opposite way as well)
 
 - Able to generate and print out receipt of a booking with all tenant and booking details.
     - By default, avoid id details and pic. But allow to optionally add them for any possible legal purposes.
+    - Show rent payments/refunds and pending rent separately from deposits received, deposits returned, and the deposit still held.
 
 - Able to generate and print monthly ledger to use for monthly gst submission. Internal note: Keep the backend of the ledger generation open ended where any start and end dates are accepted to allow scaling to other date ranges. The format below;
-    - Select bookings by actual checkout date in the lodge's timezone. Include the whole booking's saved base rent, CGST and SGST in the period containing that checkout, regardless of arrival or payment dates. Open stays and cancelled reservations are excluded.
+    - Select bookings by actual checkout date in the lodge's timezone. Include the whole booking's saved base rent, CGST and SGST in the period containing that checkout, regardless of arrival or transaction dates. Open stays and cancelled reservations are excluded. Security deposits and their returns do not contribute to ledger amounts.
 
 | Unit | Rent | CGST | SGST |
 | :--- | :---: | :---: | :---: |

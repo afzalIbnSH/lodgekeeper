@@ -205,33 +205,32 @@ Each guest record contains one document and one captured image.
 
 Table: `booking_transactions`
 
-Each row records one payment received or refund issued for a booking. Both types link directly to the booking; refunds are not linked to individual payment rows.
+Each row records one rent payment, rent refund, security deposit receipt, or security deposit return. All types link directly to the booking; outgoing entries are not linked to individual incoming rows. Deposit balances are derived from these entries, with no `required_deposit` or stored deposit-balance column on the booking.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `booking_id` | `uuid` | Booking this payment or refund belongs to. |
-| `created_by_user_id` | `uuid` | User who recorded the payment or refund. |
-| `type` | `text` | `PAYMENT` for money received or `REFUND` for money returned; defaults to `PAYMENT`. |
-| `amount` | `numeric(12,2)` | Positive amount received or returned, in INR. The type determines its effect on the balance. |
+| `booking_id` | `uuid` | Booking this transaction belongs to. |
+| `created_by_user_id` | `uuid` | User who recorded the transaction. |
+| `type` | `text` | `PAYMENT`, `REFUND`, `DEPOSIT_RECEIVED`, or `DEPOSIT_RETURNED`; defaults to `PAYMENT`. |
+| `amount` | `numeric(12,2)` | Positive amount received or returned, in INR. The type determines which balance it affects. |
 | `transacted_at` | `timestamptz` | Time the money was received or returned, distinct from when the record was created. |
-| `reason` | `text`, nullable | Required and nonblank for refunds; optional for payments. |
+| `reason` | `text`, nullable | Required and nonblank for `REFUND`; optional for the other types, including routine deposit returns. |
 
-Constraints: foreign key `booking_id` to `bookings(id)`; foreign key `created_by_user_id` to `app_users(id)`; `type IN ('PAYMENT', 'REFUND')`; `amount > 0`; when `type = 'REFUND'`, `reason` must be nonnull and nonblank after trimming. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
+Constraints: foreign key `booking_id` to `bookings(id)`; foreign key `created_by_user_id` to `app_users(id)`; `type IN ('PAYMENT', 'REFUND', 'DEPOSIT_RECEIVED', 'DEPOSIT_RETURNED')`; `amount > 0`; when `type = 'REFUND'`, `reason` must be nonnull and nonblank after trimming. Shared field conventions apply, including rejection of non-finite amounts and timestamps.
 
-For each booking, derive net received and pending amounts as:
+`PAYMENT` and `REFUND` affect rent payments only. `DEPOSIT_RECEIVED` and `DEPOSIT_RETURNED` affect the security deposit held only. For each booking, derive balances as follows, restricting each sum to that booking and type and treating empty sums as zero:
 
-```sql
-net_received = COALESCE(SUM(
-    CASE WHEN type = 'PAYMENT' THEN amount ELSE -amount END
-), 0)
-pending_amount = bookings.total_rent - net_received
+```text
+rent_paid = sum(PAYMENT amounts) - sum(REFUND amounts)
+rent_pending = bookings.total_rent - rent_paid
+deposit_held = sum(DEPOSIT_RECEIVED amounts) - sum(DEPOSIT_RETURNED amounts)
 ```
 
-Neither net received, pending amount, nor a paid/unpaid flag is stored.
+Neither these balances nor paid/unpaid or deposit-returned flags are stored.
 
-Cumulative refunds must not exceed cumulative payments for the booking. This cross-row rule is enforced by the application: every payment/refund insert path locks the parent booking row with `SELECT ... FOR UPDATE`, reads the current totals, validates the proposed refund against net received, and inserts within the same transaction. A row-level check constraint alone cannot enforce this aggregate limit.
+Cumulative `REFUND` amounts must not exceed cumulative `PAYMENT` amounts; cumulative `DEPOSIT_RETURNED` amounts must not exceed cumulative `DEPOSIT_RECEIVED` amounts. These cross-row rules are enforced by the application: every transaction insert path locks the parent booking row with `SELECT ... FOR UPDATE`, reads the current totals, validates a refund against `rent_paid` or a deposit return against `deposit_held`, and inserts within the same database transaction. A row-level check constraint alone cannot enforce these aggregate limits. When one form records both a rent payment and a deposit receipt, insert both rows atomically.
 
-Rows are append-only: existing payments and refunds cannot be updated or deleted, including when a booking is cancelled. The runtime database role has `SELECT` and `INSERT` privileges on `booking_transactions`, but no `UPDATE`, `DELETE`, or `TRUNCATE` privileges; it must be separate from the table-owning migration role. Both shared timestamps are set on insertion, and `updated_at` remains equal to `created_at`. [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
+Rows of all four types are append-only: existing entries cannot be updated or deleted, including when a booking is cancelled. The runtime database role has `SELECT` and `INSERT` privileges on `booking_transactions`, but no `UPDATE`, `DELETE`, or `TRUNCATE` privileges; it must be separate from the table-owning migration role. Both shared timestamps are set on insertion, and `updated_at` remains equal to `created_at`. [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html).
 
 ## Deletion and history
 
@@ -250,5 +249,5 @@ Primary keys, unique constraints, and both exclusion constraints supply their ow
 | `bookings` | `(checked_in_at)` | Actual check-in date ranges and stay history. |
 | `bookings` | `(checked_out_at) WHERE checked_out_at IS NOT NULL` | Actual checkout date ranges for monthly and custom-date ledgers. |
 | `booking_guests` | `(booking_id)` | Load all occupants for a booking. |
-| `booking_transactions` | `(booking_id, transacted_at)` | Load a booking's payments and refunds in event-time order and calculate net received. |
+| `booking_transactions` | `(booking_id, transacted_at)` | Load a booking's transaction history in event-time order and derive rent and deposit balances. |
 | `units` | `(unit_type_id)` | List units by type; support the type reference. |
