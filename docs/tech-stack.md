@@ -26,7 +26,7 @@ Monthly budget in USD, as of 2 November 2026, before tax:
 | Render PostgreSQL: 256 MB RAM, 0.1 CPU | $6 |
 | 5 GB database storage allowance | $1.50 |
 | Daily database export job | ~$1 |
-| R2 allowance for IDs and database exports | ~$1 initially |
+| Cloudflare R2 allowance for IDs and database exports | ~$1 initially |
 | **Total** | **~$16.50/month** |
 
 Use the free Hobby workspace and included `onrender.com` address. HTTPS renews automatically; no domain purchase needed. [Prices](https://render.com/pricing), [scheduled jobs](https://render.com/docs/cronjobs), [HTTPS](https://render.com/docs/tls).
