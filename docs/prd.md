@@ -27,6 +27,7 @@ Below are what the client expect from the software;
         - Internal note: Use Cloudflare R2 to store images. IDs are never to be deleted.
     - See rent of the unit pre-filled based on the pre-configured amount against the unit type and selected number of days
         - Allow the total rent for the whole stay to be edited.
+            - The lowest current rental is 300 which is for the single room with no attached bathroom. In the recent past, including a discount on it, no rent lower than 250 has been accepted. Sometimes though, a room maybe occupied temporarily for free by a friend or relative, in which case rent can be 0. Internal note: Allow the rent to be only 0 or >= 250.
         - Changing the default rate later shouldn't change the rent already agreed for a saved booking.
         - Keep all amounts exact to the paise (INR). The amount should be broken down into base, CGST and SGST, adding up exactly to the chosen total. Both GST amounts should be 2.5% of the base amount. To calculate this; if chosen amount for example is 600;
             - Calculate base amount as 600/1.05 = 571.428571429. Truncate this to two decimal places, which in this case would be 571.42.
@@ -65,7 +66,7 @@ Below are what the client expect from the software;
     - Show rent payments/refunds and pending rent separately from deposits received, deposits returned, and the deposit still held.
 
 - Able to generate and print monthly ledger to use for monthly gst submission. Internal note: Keep the backend of the ledger generation open ended where any start and end dates are accepted to allow scaling to other date ranges. The format below;
-    - Select bookings by actual checkout date in the lodge's timezone. Include the whole booking's saved base rent, CGST and SGST in the period containing that checkout, regardless of arrival or transaction dates. Open stays and cancelled reservations are excluded. Security deposits and their returns do not contribute to ledger amounts.
+    - Select bookings by actual checkout date in the lodge's timezone. Include the whole booking's saved base rent, CGST and SGST in the period containing that checkout, regardless of arrival or transaction dates. Open stays, cancelled reservations and free stays (0 rent) are excluded. Security deposits and their returns do not contribute to ledger amounts.
 
 | Unit | Rent | CGST | SGST |
 | :--- | :---: | :---: | :---: |

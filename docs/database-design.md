@@ -108,7 +108,7 @@ A booking holds the shared details of a reservation or stay, including one guest
 | `checked_out_at` | `timestamptz`, nullable | Actual departure; null until the guest checks out. |
 | `cancelled_at` | `timestamptz`, nullable | Cancellation time for a reservation that has not checked in. |
 | `default_daily_total_rent_snapshot` | `numeric(12,2)` | Unit type's tax-inclusive daily default total rent when the booking was created. |
-| `total_rent` | `numeric(12,2)` | Final tax-inclusive rent for the whole stay, including any manual override. |
+| `total_rent` | `numeric(12,2)` | Final tax-inclusive rent for the whole stay, including any manual override: ₹0 for a free stay, otherwise at least ₹250. |
 | `base_rent` | `numeric(12,2)` | Final base rent: total minus the finalized CGST and SGST amounts. |
 | `cgst` | `numeric(12,2)` | Final CGST amount. |
 | `sgst` | `numeric(12,2)` | Final SGST amount. |
@@ -123,12 +123,16 @@ Constraints:
 - `cancelled_at` must be null, or both `checked_in_at` and `checked_out_at` must be null.
 - When `scheduled_check_in` is nonnull, both contact fields must be nonnull and nonblank. The contact need not be an occupant.
 - When `checked_in_at` is nonnull, `guest_address` and `purpose_of_visit` must both be nonnull and nonblank.
-- `default_daily_total_rent_snapshot > 0`, `total_rent > 0`, and nonnegative base and tax amounts.
+- `default_daily_total_rent_snapshot > 0`.
+- `CHECK (total_rent = 0 OR total_rent >= 250)`; negative rent and amounts between ₹0 and ₹250 are rejected.
+- `CHECK (base_rent >= 0 AND cgst >= 0 AND sgst >= 0)`; shouldn't accept something like "₹310 base + (−₹5 CGST) + (−₹5 SGST)"
 - `total_rent = base_rent + cgst + sgst` exactly.
 - Required textual values are nonblank. Non-finite numeric values and timestamps are rejected.
 - No conflicting allocations for reservations and occupied bookings through their scheduled checkout, and no overlapping actual stays, for the same unit, as described below.
 
 The total need not equal daily default times days, because the user can override the stay total. Similarly, scheduled checkout need not equal the calculated time, because the user can override that time. `booked_days` records the billing choice even when the final checkout differs.
+
+A free stay has zero total rent, base rent, CGST, and SGST; its daily default snapshot stays positive. No zero-value payment row is created. The ₹250 minimum applies to the whole stay's agreed rent, not individual payments, refunds, or deposits.
 
 Changes to unit type rates must not recalculate saved rates.
 
