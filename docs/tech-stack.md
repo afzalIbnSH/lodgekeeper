@@ -49,3 +49,11 @@ R2's allowance assumes ~1 MB per ID and rolling database exports. Costs grow as 
 | Amazon S3 | Also cheap at this volume, with explicit region selection and more archival options. R2 suits our current needs. |
 
 Check responsiveness from the lodge before launch. Moving to DigitalOcean later means deploying the app and transferring PostgreSQL during a maintenance window. R2 files can stay put; the `onrender.com` address can't move with us.
+
+## Local development
+
+Run Django on your machine, with PostgreSQL and [Garage](https://garagehq.deuxfleurs.fr/documentation/quick-start/) in Docker Compose. Match production's PostgreSQL major version and required extensions so we test the same database constraints locally.
+
+Use the S3 backend from [django-storages](https://django-storages.readthedocs.io/en/latest/backends/s3_compatible/cloudflare-r2.html) for uploads. Point it at Garage locally and private R2 in production, changing the endpoint, bucket, region and credentials through settings. The upload code stays the same. Local uploads stay on your machine, with no Cloudflare usage or charges.
+
+CI gets its own isolated PostgreSQL and Garage instances, using fictional guest data and ID images. Garage covers everyday upload tests; still verify permissions, private access and signed URLs against actual R2 before launch.
