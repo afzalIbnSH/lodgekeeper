@@ -55,6 +55,12 @@ Below are what the client expect from the software;
         - Preserve all transaction records when cancelling. Record any rent refund or deposit return separately, without deleting or editing earlier entries. Cancellation itself does not record money returned.
     - Internal note: Let this be derived in db via a scheduled check in time and a null actual check in time. Don't use a separate `booking_status` column and introduce a second source of truth.
 
+- Edit saved bookings.
+    - Before check-in, unless cancelled, allow changes to the caller's name/phone, planned arrival, number of days, expected checkout and agreed total rent.
+    - During an open stay, allow changes to the number of days, expected checkout and agreed total rent.
+    - Keep the same unit and the original unit/rate snapshots. Moving a saved booking to another unit is out of scope.
+    - After checkout or cancellation, booking details are read-only. Staff can still record later rent payments for checked-out stays, and rent refunds or deposit returns after checkout or cancellation. Earlier money entries stay unchanged.
+
 - When guest/s checkout;
     - Mark the booking as checked out, which should save the actual checked out time in the booking. Internal note: Again, don't use a separate `booking_status` column, just have a actual check out column which shall be null originally and filled on check out.
     - Show the deposit still held and let staff record how much is actually returned. Do not automatically mark it returned on checkout. Any unreturned deposit remains visible and can be returned later, including after checkout or reservation cancellation.

@@ -136,6 +136,8 @@ A free stay has zero total rent, base rent, CGST, and SGST; its daily default sn
 
 Changes to unit type rates must not recalculate saved rates.
 
+The application enforces the [PRD's booking edit rules](prd.md), locking the booking before checking its state and saving changes. Edits keep `unit_id` and snapshots unchanged; an allowed change to `total_rent` recalculates `base_rent`, `cgst`, and `sgst`.
+
 State is derived from timestamps, without a separate booking status column:
 
 | State | Condition |
